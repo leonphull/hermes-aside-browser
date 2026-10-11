@@ -1,0 +1,13 @@
+name: aside-browser
+version: 0.1.0
+description: Use the signed-in Aside browser as Hermes's browser when the Aside CLI is installed.
+author: Leon Phull
+license: MIT
+kind: standalone
+requires_hermes: ">=0.21.0"
+provides_tools:
+  - aside_status
+  - aside_exec
+  - aside_repl
+  - aside_session
+  - aside_memory
