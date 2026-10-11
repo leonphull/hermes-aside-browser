@@ -16,8 +16,6 @@ Plugin (Tools + Skills):
 hermes plugins install leonphull/hermes-aside-browser --enable
 ```
 
-Until that repo is public, copy this directory to `~/.hermes/plugins/aside-browser` and run `hermes plugins enable aside-browser`.
-
 Connector (the vendor MCP tools):
 
 ```bash
