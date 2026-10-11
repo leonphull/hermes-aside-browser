@@ -128,3 +128,32 @@ class SkillTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PolicyTest(unittest.TestCase):
+    def test_pin_does_not_override_explicit_model(self):
+        from hermes_plugins.aside_browser.policy import apply_policy
+        merged = apply_policy({"prompt": "go", "model": "openai-codex/gpt-5.5"}, {"model": "xai-grok-oauth/grok-4.7"})
+        self.assertEqual(merged["model"], "openai-codex/gpt-5.5")
+
+    def test_empty_call_takes_profile_pin(self):
+        from hermes_plugins.aside_browser.policy import apply_policy
+        merged = apply_policy({"prompt": "go"}, {"model": "kimi-code/k3", "host": "mini"})
+        self.assertEqual(merged["model"], "kimi-code/k3")
+        self.assertEqual(merged["host"], "mini")
+
+    def test_resolve_unique_and_default(self):
+        from hermes_plugins.aside_browser.catalog import resolve_choice
+        catalog = {
+            "presets": {"standard": {"provider": "claude-code", "model": "claude-opus-5-5"}},
+            "providers": [
+                {"id": "xai-grok-oauth", "models": [{"id": "grok-4.7", "name": "Grok 4.7"}]},
+                {"id": "kimi-code", "models": [{"id": "k3", "name": "Kimi K3"}]},
+            ],
+            "custom": [],
+        }
+        self.assertEqual(resolve_choice(catalog, "default"), "")
+        self.assertEqual(resolve_choice(catalog, "grok-4.7"), "xai-grok-oauth/grok-4.7")
+        self.assertEqual(resolve_choice(catalog, "standard"), "claude-code/claude-opus-5-5")
+        with self.assertRaises(ValueError):
+            resolve_choice(catalog, "nope")

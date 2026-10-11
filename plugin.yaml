@@ -1,5 +1,5 @@
 name: aside-browser
-version: 0.1.0
+version: 0.2.0
 description: Use the signed-in Aside browser as Hermes's browser when the Aside CLI is installed.
 author: Leon Phull
 license: MIT
@@ -11,3 +11,24 @@ provides_tools:
   - aside_repl
   - aside_session
   - aside_memory
+config_schema:
+  model:
+    type: string
+    default: ""
+    description: "Pinned Aside model as provider/model. Empty uses Aside's own default."
+  host:
+    type: string
+    default: ""
+    description: "Aside session host. Empty means the local machine."
+  account:
+    type: string
+    default: ""
+    description: "Aside account id, such as u0. Empty uses Aside's current account."
+  effort:
+    type: string
+    default: ""
+    description: "Thinking effort. Empty uses Aside's own default."
+  speed:
+    type: string
+    default: ""
+    description: "Model speed, default or fast. Empty uses Aside's own default."

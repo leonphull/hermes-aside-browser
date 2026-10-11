@@ -5,6 +5,14 @@ from __future__ import annotations
 import json
 
 from . import aside_cli
+from .policy import apply_policy
+
+_policy_loader = lambda: {}
+
+
+def set_policy_loader(loader) -> None:
+    global _policy_loader
+    _policy_loader = loader
 
 DESTRUCTIVE = {"archive", "delete"}
 
@@ -26,11 +34,13 @@ def _optional(data: dict, key: str) -> str | None:
 
 
 def aside_status(args=None, **kwargs) -> str:
-    return _dump(aside_cli.probe())
+    payload = aside_cli.probe()
+    payload["profile"] = _policy_loader() or {}
+    return _dump(payload)
 
 
 def aside_exec(args=None, **kwargs) -> str:
-    data = _args(args)
+    data = apply_policy(_args(args), _policy_loader())
     try:
         argv = aside_cli.exec_args(
             str(data.get("prompt") or ""),
@@ -52,7 +62,7 @@ def aside_exec(args=None, **kwargs) -> str:
 
 
 def aside_repl(args=None, **kwargs) -> str:
-    data = _args(args)
+    data = apply_policy(_args(args), _policy_loader())
     try:
         argv = aside_cli.repl_args(
             str(data.get("code") or ""),
@@ -70,7 +80,7 @@ def aside_repl(args=None, **kwargs) -> str:
 
 
 def aside_session(args=None, **kwargs) -> str:
-    data = _args(args)
+    data = apply_policy(_args(args), _policy_loader())
     action = str(data.get("action") or "").strip()
     if action in DESTRUCTIVE and data.get("confirm") is not True:
         return _dump(
@@ -96,7 +106,7 @@ def aside_session(args=None, **kwargs) -> str:
 
 
 def aside_memory(args=None, **kwargs) -> str:
-    data = _args(args)
+    data = apply_policy(_args(args), _policy_loader())
     queries = data.get("queries") or []
     if isinstance(queries, str):
         queries = [queries]

@@ -33,6 +33,23 @@ hermes skills install leonphull/hermes-aside-browser/aside-browser
 
 Do not point `aside skills install` at Hermes. That installer does not know Hermes, and its skill tells the agent to run a remote installer script. This package refuses to do that.
 
+
+## Choose the subscription
+
+Each Hermes profile keeps its own choice. Empty means Aside's own default, which is whatever you set in Aside (plan model or a connected provider).
+
+```bash
+hermes aside models
+hermes aside use default
+hermes aside use xai-grok-oauth/grok-4.7
+hermes aside use standard
+hermes aside host local
+hermes aside account u0
+hermes aside status
+```
+
+`models` lists connected subscriptions and bring-your-own providers from Aside's local catalog. It does not print credentials. A one-turn override still wins if you name a different model in the task.
+
 ## Surfaces
 
 | Hermes UI | What you get |
