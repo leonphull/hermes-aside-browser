@@ -4,11 +4,23 @@ from __future__ import annotations
 
 from .catalog import format_ref, load_catalog, resolve_choice
 
-KEYS = ("model", "host", "account", "effort", "speed")
+KEYS = ("model_pin", "host", "account", "effort", "speed")
 
 
 def read_policy(ctx) -> dict:
     return {key: str(ctx.get_config(key, "") or "").strip() for key in KEYS}
+
+
+def tool_policy(ctx) -> dict:
+    """Shape the profile pin the way aside_exec expects it."""
+    raw = read_policy(ctx)
+    return {
+        "model": raw["model_pin"],
+        "host": raw["host"],
+        "account": raw["account"],
+        "effort": raw["effort"],
+        "speed": raw["speed"],
+    }
 
 
 def write_policy(ctx, **updates) -> dict:
@@ -57,7 +69,7 @@ def format_models(catalog: dict) -> str:
 
 
 def format_status(policy: dict, probe: dict) -> str:
-    model = policy["model"] or "Aside's own default"
+    model = policy["model_pin"] or "Aside's own default"
     host = policy["host"] or "local"
     account = policy["account"] or "Aside's current account"
     lines = [
@@ -98,7 +110,7 @@ def handle(ctx, args) -> None:
         return
     if command == "use":
         pin = resolve_choice(load_catalog(), args.choice)
-        write_policy(ctx, model=pin)
+        write_policy(ctx, model_pin=pin)
         print("This profile now uses " + (pin or "Aside's own default") + ".")
         return
     if command == "host":

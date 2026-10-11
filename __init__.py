@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .aside_cli import find_aside
-from .cli import build_parser, handle, read_policy
+from .cli import build_parser, handle, tool_policy
 from .tools import HANDLERS, SCHEMAS, set_policy_loader
 
 SKILL_DESCRIPTION = "Use the signed-in Aside browser for web tasks."
@@ -16,7 +16,7 @@ def _aside_installed() -> bool:
 
 
 def register(ctx) -> None:
-    set_policy_loader(lambda: read_policy(ctx))
+    set_policy_loader(lambda: tool_policy(ctx))
     for name, schema in SCHEMAS.items():
         ctx.register_tool(
             name=name,
