@@ -34,8 +34,25 @@ def _optional(data: dict, key: str) -> str | None:
 
 
 def aside_status(args=None, **kwargs) -> str:
+    from .catalog import format_ref, load_catalog
+
     payload = aside_cli.probe()
-    payload["profile"] = _policy_loader() or {}
+    policy = _policy_loader() or {}
+    payload["profile"] = policy
+    catalog = load_catalog(policy.get("account") or None)
+    default = catalog.get("default") or {}
+    default_model = (
+        format_ref(default["provider"], default["model"])
+        if default.get("provider") and default.get("model")
+        else "Aside's own default"
+    )
+    payload["resolved"] = {
+        "model": policy.get("model") or default_model,
+        "model_source": "profile pin" if policy.get("model") else "Aside default",
+        "host": policy.get("host") or "local",
+        "host_source": "profile pin" if policy.get("host") else "local",
+        "account": policy.get("account") or "Aside's current account",
+    }
     return _dump(payload)
 
 
