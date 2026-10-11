@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .catalog import format_ref, load_catalog, resolve_choice
 
-KEYS = ("model_pin", "host", "account", "effort", "speed")
+KEYS = ("model_pin", "host", "account", "effort", "speed", "browser_policy")
 
 
 def read_policy(ctx) -> dict:
@@ -77,6 +77,7 @@ def format_status(policy: dict, probe: dict) -> str:
         f"This profile uses model: {model}",
         f"Host: {host}",
         f"Account: {account}",
+        f"Browser policy: {policy.get('browser_policy') or 'prefer'}",
     ]
     if policy["effort"]:
         lines.append(f"Effort: {policy['effort']}")
@@ -97,6 +98,8 @@ def build_parser(parser) -> None:
     account.add_argument("account_id", help="u0, or clear")
     effort = sub.add_parser("effort", help="Pin thinking effort, or clear")
     effort.add_argument("level", help="off, low, medium, high, xhigh, max, ultrabrowse, or clear")
+    policy = sub.add_parser("policy", help="prefer Aside, or always use it for browser actions")
+    policy.add_argument("mode", help="always or prefer")
 
 
 def handle(ctx, args) -> None:
@@ -136,5 +139,12 @@ def handle(ctx, args) -> None:
             raise SystemExit(f"invalid effort {level!r}")
         write_policy(ctx, effort=level)
         print("This profile now uses effort " + (level or "Aside's own default") + ".")
+        return
+    if command == "policy":
+        mode = args.mode.strip().lower()
+        if mode not in {"always", "prefer"}:
+            raise SystemExit("policy must be always or prefer")
+        write_policy(ctx, browser_policy=mode)
+        print(f"This profile browser policy is now {mode}.")
         return
     raise SystemExit(f"unknown command {command}")

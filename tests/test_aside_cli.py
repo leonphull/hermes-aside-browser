@@ -157,3 +157,15 @@ class PolicyTest(unittest.TestCase):
         self.assertEqual(resolve_choice(catalog, "standard"), "claude-code/claude-opus-5-5")
         with self.assertRaises(ValueError):
             resolve_choice(catalog, "nope")
+
+
+class GateTest(unittest.TestCase):
+    def test_always_blocks_builtin_browser_only_when_ready(self):
+        from hermes_plugins.aside_browser.gate import should_block
+        policy = {"browser_policy": "always"}
+        self.assertTrue(should_block("browser_navigate", policy, True))
+        self.assertTrue(should_block("open_preview", policy, True))
+        self.assertFalse(should_block("browser_navigate", policy, False))
+        self.assertFalse(should_block("aside_exec", policy, True))
+        self.assertFalse(should_block("computer_use", policy, True))
+        self.assertFalse(should_block("browser_navigate", {"browser_policy": "prefer"}, True))

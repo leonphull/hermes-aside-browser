@@ -1,5 +1,5 @@
 name: aside-browser
-version: 0.2.0
+version: 0.3.0
 description: Use the signed-in Aside browser as Hermes's browser when the Aside CLI is installed.
 author: Leon Phull
 license: MIT
@@ -11,8 +11,10 @@ provides_tools:
   - aside_repl
   - aside_session
   - aside_memory
+provides_hooks:
+  - pre_tool_call
 config_schema:
-  model:
+  model_pin:
     type: string
     default: ""
     description: "Pinned Aside model as provider/model. Empty uses Aside's own default."
@@ -32,3 +34,7 @@ config_schema:
     type: string
     default: ""
     description: "Model speed, default or fast. Empty uses Aside's own default."
+  browser_policy:
+    type: string
+    default: "prefer"
+    description: "prefer lets the agent choose. always blocks the built-in browser while Aside is READY."
