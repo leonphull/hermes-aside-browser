@@ -1,4 +1,4 @@
-"""`hermes aside` — pick the subscription this Hermes profile uses."""
+"""`hermes aside` — manage this profile's Aside settings: model, host, account, effort, speed, permission, browser policy."""
 
 from __future__ import annotations
 
