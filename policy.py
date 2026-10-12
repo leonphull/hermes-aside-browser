@@ -2,28 +2,58 @@
 
 from __future__ import annotations
 
+from .aside_cli import EFFORTS, PERMISSIONS, SPEEDS
 from .catalog import resolve_choice
 
-EMPTY = {"model": "", "host": "", "account": "", "effort": "", "speed": ""}
+EMPTY = {"model": "", "host": "", "account": "", "effort": "", "speed": "", "permission": ""}
+DEFAULT_PERMISSION = "ask"
+
+
+class PolicyError(ValueError):
+    """The trusted profile policy is unusable. Callers must fail closed."""
 
 
 def normalize(raw: dict | None) -> dict:
     data = dict(EMPTY)
-    if not raw:
+    if raw is None:
         return data
+    if not isinstance(raw, dict):
+        raise PolicyError("profile policy is not a mapping")
     for key in EMPTY:
         value = raw.get(key)
         data[key] = "" if value is None else str(value).strip()
     return data
 
 
+def effective_policy(raw: dict | None) -> dict:
+    """Return the validated policy. Empty permission means ask; unknown values raise."""
+    chosen = normalize(raw)
+    chosen["permission"] = chosen["permission"] or DEFAULT_PERMISSION
+    if chosen["permission"] not in PERMISSIONS:
+        raise PolicyError("profile permission must be ask, guard, or full-access")
+    if chosen["effort"] and chosen["effort"] not in EFFORTS:
+        raise PolicyError("profile effort is invalid")
+    if chosen["speed"] and chosen["speed"] not in SPEEDS:
+        raise PolicyError("profile speed is invalid")
+    return chosen
+
+
 def apply_policy(call: dict, policy: dict | None) -> dict:
-    """Fill only the fields the caller left empty. A one-turn override wins."""
+    """Apply user locks while preserving one-turn model, effort, and speed choices.
+
+    The permission always comes from the profile (default ask), never from the call.
+    Raises PolicyError when the profile policy is invalid.
+    """
     merged = dict(call)
-    chosen = normalize(policy)
-    for key in ("model", "host", "account", "effort", "speed"):
+    merged.pop("permission", None)
+    chosen = effective_policy(policy)
+    for key in ("model", "effort", "speed"):
         if not str(merged.get(key) or "").strip() and chosen[key]:
             merged[key] = chosen[key]
+    for key in ("host", "account"):
+        if chosen[key]:
+            merged[key] = chosen[key]
+    merged["permission"] = chosen["permission"]
     return merged
 
 

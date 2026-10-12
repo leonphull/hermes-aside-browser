@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "aside-browser",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Use the signed-in Aside browser as Hermes's browser when the Aside CLI is installed.",
   "license": "MIT",
   "keywords": ["aside", "browser", "hermes"]

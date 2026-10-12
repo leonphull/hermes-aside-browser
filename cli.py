@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .catalog import format_ref, load_catalog, resolve_choice
 
-KEYS = ("model_pin", "host", "account", "effort", "speed", "browser_policy")
+KEYS = ("model_pin", "host", "account", "effort", "speed", "permission", "browser_policy")
 
 
 def read_policy(ctx) -> dict:
@@ -20,6 +20,7 @@ def tool_policy(ctx) -> dict:
         "account": raw["account"],
         "effort": raw["effort"],
         "speed": raw["speed"],
+        "permission": raw["permission"] or "ask",
     }
 
 
@@ -35,30 +36,18 @@ def write_policy(ctx, **updates) -> dict:
 
 
 def format_models(catalog: dict) -> str:
-    lines = ["Aside models visible to this machine. No credentials are shown.", ""]
+    lines = ["Aside models from settings.json.", ""]
     default = catalog.get("default")
     if default:
         lines.append(f"Aside default: {format_ref(default['provider'], default['model'])}")
     else:
         lines.append("Aside default: not set")
-    lines.append("Plugin default: `hermes aside use default` leaves the choice to Aside.")
     lines.append("")
     presets = catalog.get("presets") or {}
     if presets:
         lines.append("Presets from Aside settings:")
         for name, item in presets.items():
             lines.append(f"  {name:10} {format_ref(item['provider'], item['model'])}")
-        lines.append("")
-    providers = catalog.get("providers") or []
-    if not providers:
-        lines.append("No connected providers found in Aside.")
-    for provider in providers:
-        label = "subscription" if provider["kind"] == "subscription" else "connected"
-        lines.append(f"{provider['name']} [{label}]  {provider['id']}")
-        models = provider["models"] or [{"id": "(no model list)", "name": ""}]
-        for model in models:
-            name = f"  {model['name']}" if model.get("name") and model["name"] != model["id"] else ""
-            lines.append(f"  {format_ref(provider['id'], model['id'])}{name}")
         lines.append("")
     custom = catalog.get("custom") or []
     if custom:
@@ -77,6 +66,7 @@ def format_status(policy: dict, probe: dict) -> str:
         f"This profile uses model: {model}",
         f"Host: {host}",
         f"Account: {account}",
+        f"Permission: {policy.get('permission') or 'ask'}",
         f"Browser policy: {policy.get('browser_policy') or 'prefer'}",
     ]
     if policy["effort"]:
@@ -89,7 +79,7 @@ def format_status(policy: dict, probe: dict) -> str:
 def build_parser(parser) -> None:
     sub = parser.add_subparsers(dest="aside_cmd", required=True)
     sub.add_parser("status", help="Show Aside readiness and this profile's choice")
-    sub.add_parser("models", help="List Aside subscriptions and connected models")
+    sub.add_parser("models", help="List Aside default, presets, and custom models")
     use = sub.add_parser("use", help="Pin a model, a preset, or Aside's default")
     use.add_argument("choice", help="provider/model, a model id, fast/standard/visual, or default")
     host = sub.add_parser("host", help="Pin a remote Aside host, or local")
@@ -98,6 +88,8 @@ def build_parser(parser) -> None:
     account.add_argument("account_id", help="u0, or clear")
     effort = sub.add_parser("effort", help="Pin thinking effort, or clear")
     effort.add_argument("level", help="off, low, medium, high, xhigh, max, ultrabrowse, or clear")
+    permission = sub.add_parser("permission", help="Set this profile's Aside permission")
+    permission.add_argument("level", help="ask, guard, or full-access (clear/default resets to ask)")
     policy = sub.add_parser("policy", help="prefer Aside, or always use it for browser actions")
     policy.add_argument("mode", help="always or prefer")
 
@@ -139,6 +131,15 @@ def handle(ctx, args) -> None:
             raise SystemExit(f"invalid effort {level!r}")
         write_policy(ctx, effort=level)
         print("This profile now uses effort " + (level or "Aside's own default") + ".")
+        return
+    if command == "permission":
+        level = args.level.strip()
+        if level in {"clear", "default"}:
+            level = "ask"
+        if level not in {"ask", "guard", "full-access"}:
+            raise SystemExit("permission must be ask, guard, or full-access")
+        write_policy(ctx, permission=level)
+        print(f"This profile permission is now {level}.")
         return
     if command == "policy":
         mode = args.mode.strip().lower()

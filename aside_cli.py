@@ -15,6 +15,7 @@ MAX_OUTPUT = 48_000
 EFFORTS = {"off", "minimal", "low", "medium", "high", "xhigh", "max", "ultrabrowse"}
 SPEEDS = {"default", "fast"}
 PERMISSIONS = {"ask", "guard", "full-access"}
+CONTINUATION_ACTIONS = {"resume", "steer", "queue"}
 
 
 def find_aside() -> str | None:
@@ -182,7 +183,6 @@ def global_flags(*, account: str | None = None, host: str | None = None, profile
 def exec_args(
     prompt: str,
     *,
-    session_id: str | None = None,
     account: str | None = None,
     host: str | None = None,
     profile: str | None = None,
@@ -192,12 +192,6 @@ def exec_args(
     permission: str | None = None,
 ) -> list[str]:
     text = safe_token(prompt, "prompt")
-    if session_id:
-        sid = safe_token(session_id, "session_id")
-        if not sid.startswith("ses_"):
-            raise ValueError("session_id must start with ses_")
-        flags = ["--account", safe_token(account, "account")] if account else []
-        return ["session", "resume", *flags, sid, text]
     flags = global_flags(account=account, host=host, profile=profile)
     if model:
         flags += ["--model", safe_token(model, "model")]
@@ -235,9 +229,13 @@ def session_args(
     action: str,
     *,
     session_id: str | None = None,
-    prompt: str | None = None,
     account: str | None = None,
 ) -> list[str]:
+    """Build argv for list, stop, archive, and delete only.
+
+    resume, steer, and queue are deliberately absent: they would drive an existing
+    session whose permission and host this plugin cannot verify.
+    """
     action = action.strip()
     flags = ["--account", safe_token(account, "account")] if account else []
     if action == "list":
@@ -251,9 +249,6 @@ def session_args(
         return ["session", "archive", *flags, sid]
     if action == "delete":
         return ["session", "delete", *flags, sid]
-    if action in {"resume", "steer", "queue"}:
-        text = safe_token(prompt or "", "prompt")
-        return ["session", action, *flags, sid, text]
     raise ValueError("invalid action")
 
 
