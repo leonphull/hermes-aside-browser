@@ -432,6 +432,9 @@ class SkillTest(unittest.TestCase):
         self.assertIn("do not route around it", skill)
         self.assertIn("outside this wrapper's guarantees", skill)
         self.assertNotIn("always override anything named in a task", readme)
+        self.assertNotIn("every tool fails closed", readme)
+        self.assertNotIn("Empty means the local machine", (ROOT / "plugin.yaml").read_text(encoding="utf-8"))
+        self.assertIn("not guaranteed local", (ROOT / "plugin.yaml").read_text(encoding="utf-8"))
 
     def test_readme_has_no_invalid_permission_pipeline(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

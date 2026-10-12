@@ -21,7 +21,7 @@ config_schema:
   host:
     type: string
     default: ""
-    description: "Aside session host. Empty means the local machine."
+    description: "Aside session host. Empty uses Aside's own default host (not guaranteed local); the literal value local pins the local host."
   account:
     type: string
     default: ""
