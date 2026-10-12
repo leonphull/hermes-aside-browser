@@ -95,8 +95,8 @@ def aside_status(args=None, **kwargs) -> str:
     payload["resolved"] = {
         "model": policy.get("model") or default_model,
         "model_source": "profile pin" if policy.get("model") else "Aside default",
-        "host": policy.get("host") or "local",
-        "host_source": "profile pin" if policy.get("host") else "local",
+        "host": policy.get("host") or "Aside's default host",
+        "host_source": "profile pin" if policy.get("host") else "Aside default",
         "account": policy.get("account") or "Aside's current account",
         "permission": policy.get("permission") or ("invalid" if payload.get("policy_error") else "ask"),
     }
@@ -247,7 +247,10 @@ SCHEMAS = {
                 "type": "object",
                 "properties": {
                     "prompt": {"type": "string", "description": "Task prompt or URL."},
-                    "profile": {"type": "string", "description": "Browser profile id on the selected host."},
+                    "profile": {
+                        "type": "string",
+                        "description": "Aside browser profile id on the selected host. Not a Hermes profile or account.",
+                    },
                     "model": {"type": "string", "description": "Model id or provider/model."},
                     "effort": {
                         "type": "string",

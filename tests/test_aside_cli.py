@@ -191,7 +191,8 @@ class ToolGuardTest(unittest.TestCase):
             self.assertIn(["--host", "mini"], [argv[i:i + 2] for i in range(len(argv) - 1)])
             self.assertNotIn("evil", argv)
 
-    def test_unpinned_host_and_account_pass_through(self):
+    def test_unpinned_host_and_account_hidden_values_are_dropped(self):
+        tools.set_policy_loader(lambda: {})
         captured = []
 
         def capture(argv, timeout):
@@ -203,10 +204,27 @@ class ToolGuardTest(unittest.TestCase):
             tools.aside_repl({"code": "console.log(1)", "host": "evil", "account": "u9"})
             tools.aside_session({"action": "list", "account": "u9"})
             tools.aside_memory({"queries": ["go"], "account": "u9"})
+        self.assertEqual(len(captured), 4)
         for argv in captured:
-            self.assertIn(["--account", "u9"], [argv[i:i + 2] for i in range(len(argv) - 1)])
-        for argv in captured[:2]:
-            self.assertIn(["--host", "evil"], [argv[i:i + 2] for i in range(len(argv) - 1)])
+            self.assertNotIn("--account", argv)
+            self.assertNotIn("--host", argv)
+            self.assertNotIn("u9", argv)
+            self.assertNotIn("evil", argv)
+
+    def test_pinned_local_host_is_passed_through(self):
+        tools.set_policy_loader(lambda: {"host": "local"})
+        captured = []
+
+        def capture(argv, timeout):
+            captured.append(argv)
+            return {"ok": True}
+
+        with mock.patch.object(aside_cli, "find_aside", return_value="/bin/aside"), mock.patch.object(aside_cli, "run_aside", side_effect=capture):
+            tools.aside_exec({"prompt": "go", "host": "evil"})
+            tools.aside_repl({"code": "console.log(1)", "host": "evil"})
+        for argv in captured:
+            self.assertIn(["--host", "local"], [argv[i:i + 2] for i in range(len(argv) - 1)])
+            self.assertNotIn("evil", argv)
 
     def test_permission_only_comes_from_policy(self):
         captured = []
@@ -403,10 +421,56 @@ class SkillTest(unittest.TestCase):
         self.assertNotIn("technically locked", skill + readme)
         self.assertIn("always uses plugin `aside_exec`", readme)
 
+    def test_docs_state_scope_and_no_policy_bypass(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        skill = (ROOT / "skills" / "aside-browser" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("applies to `aside_exec` only", readme)
+        self.assertIn("outside this wrapper's guarantees", readme)
+        self.assertIn("pins the literal host `local`", readme)
+        self.assertIn("not a Hermes profile", readme)
+        self.assertIn("Never change the user's Aside policy", skill)
+        self.assertIn("do not route around it", skill)
+        self.assertIn("outside this wrapper's guarantees", skill)
+        self.assertNotIn("always override anything named in a task", readme)
+
     def test_readme_has_no_invalid_permission_pipeline(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertNotIn("ask|guard|full-access", readme)
         self.assertIn("\nhermes aside permission ask\n", readme)
+
+    def _host_ctx(self):
+        store = {}
+        ctx = type(
+            "C",
+            (),
+            {
+                "get_config": lambda self, key, default="": store.get(key, default),
+                "set_config": lambda self, key, value: store.__setitem__(key, value),
+            },
+        )()
+        return ctx, store
+
+    def test_cli_host_local_saves_literal_local(self):
+        ctx, store = self._host_ctx()
+        cli.handle(ctx, argparse.Namespace(aside_cmd="host", name="local"))
+        self.assertEqual(store["host"], "local")
+        self.assertEqual(cli.tool_policy(ctx)["host"], "local")
+
+    def test_cli_host_clear_and_default_unset(self):
+        for word in ("clear", "default"):
+            ctx, store = self._host_ctx()
+            cli.handle(ctx, argparse.Namespace(aside_cmd="host", name="mini"))
+            self.assertEqual(store["host"], "mini")
+            cli.handle(ctx, argparse.Namespace(aside_cmd="host", name=word))
+            self.assertEqual(store["host"], "")
+            self.assertEqual(cli.tool_policy(ctx)["host"], "")
+
+    def test_cli_status_distinguishes_local_pin_from_unset(self):
+        ctx, store = self._host_ctx()
+        probe = {"status": "READY"}
+        self.assertIn("Host: Aside's default host", cli.format_status(cli.read_policy(ctx), probe))
+        cli.handle(ctx, argparse.Namespace(aside_cmd="host", name="local"))
+        self.assertIn("Host: local", cli.format_status(cli.read_policy(ctx), probe))
 
     def test_status_profile_keys_match_skill_names(self):
         ctx = type("C", (), {"get_config": lambda self, key, default: "", "set_config": lambda self, k, v: None})()
@@ -451,10 +515,16 @@ class PolicyTest(unittest.TestCase):
         self.assertEqual(merged["host"], "mini")
         self.assertEqual(merged["account"], "u0")
 
-    def test_unpinned_host_and_account_pass_through(self):
-        merged = policy.apply_policy({"host": "evil", "account": "u9"}, {})
-        self.assertEqual(merged["host"], "evil")
-        self.assertEqual(merged["account"], "u9")
+    def test_unpinned_host_and_account_hidden_values_are_dropped(self):
+        for pinned in ({}, None, {"host": "", "account": ""}):
+            merged = policy.apply_policy({"host": "evil", "account": "u9", "prompt": "go"}, pinned)
+            self.assertNotIn("host", merged)
+            self.assertNotIn("account", merged)
+            self.assertEqual(merged["prompt"], "go")
+
+    def test_local_host_pin_is_a_literal_value(self):
+        merged = policy.apply_policy({"host": "evil"}, {"host": "local"})
+        self.assertEqual(merged["host"], "local")
 
     def test_permission_from_call_is_dropped(self):
         self.assertEqual(policy.apply_policy({"permission": "full-access"}, {})["permission"], "ask")

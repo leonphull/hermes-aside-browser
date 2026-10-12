@@ -59,7 +59,7 @@ def format_models(catalog: dict) -> str:
 
 def format_status(policy: dict, probe: dict) -> str:
     model = policy["model_pin"] or "Aside's own default"
-    host = policy["host"] or "local"
+    host = policy["host"] or "Aside's default host"
     account = policy["account"] or "Aside's current account"
     lines = [
         f"Aside: {probe.get('status')}  {probe.get('message', '')}",
@@ -83,7 +83,7 @@ def build_parser(parser) -> None:
     use = sub.add_parser("use", help="Pin a model, a preset, or Aside's default")
     use.add_argument("choice", help="provider/model, a model id, fast/standard/visual, or default")
     host = sub.add_parser("host", help="Pin a remote Aside host, or local")
-    host.add_argument("name", help="A host name from `aside host list`, local, or clear")
+    host.add_argument("name", help="A host name from `aside host list`, local (pins the local host), or clear/default (removes the pin)")
     account = sub.add_parser("account", help="Pin an Aside account, or clear")
     account.add_argument("account_id", help="u0, or clear")
     effort = sub.add_parser("effort", help="Pin thinking effort, or clear")
@@ -110,10 +110,15 @@ def handle(ctx, args) -> None:
         return
     if command == "host":
         name = args.name.strip()
-        if name in {"local", "clear", "default"}:
+        if name.lower() == "local":
+            name = "local"
+        elif name.lower() in {"clear", "default"}:
             name = ""
         write_policy(ctx, host=name)
-        print("This profile now uses host " + (name or "local") + ".")
+        if name:
+            print("This profile now uses host " + name + ".")
+        else:
+            print("This profile host pin is cleared. Aside's own default host applies.")
         return
     if command == "account":
         account_id = args.account_id.strip()

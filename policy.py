@@ -41,11 +41,15 @@ def effective_policy(raw: dict | None) -> dict:
 def apply_policy(call: dict, policy: dict | None) -> dict:
     """Apply user locks while preserving one-turn model, effort, and speed choices.
 
-    The permission always comes from the profile (default ask), never from the call.
+    Host, account, and permission always come from the profile, never from the call. They are
+    removed from the call first, so a hidden model-supplied value cannot reach the CLI when the
+    profile leaves them unset (empty host means Aside's own default host, empty account means
+    Aside's current account, empty permission means ask).
     Raises PolicyError when the profile policy is invalid.
     """
     merged = dict(call)
-    merged.pop("permission", None)
+    for key in ("host", "account", "permission"):
+        merged.pop(key, None)
     chosen = effective_policy(policy)
     for key in ("model", "effort", "speed"):
         if not str(merged.get(key) or "").strip() and chosen[key]:
