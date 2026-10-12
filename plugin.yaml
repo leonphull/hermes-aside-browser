@@ -21,7 +21,7 @@ config_schema:
   host:
     type: string
     default: ""
-    description: "Aside session host. Empty means the local machine."
+    description: "Aside session host. Empty uses Aside's own default host (not guaranteed local); the literal value local pins the local host."
   account:
     type: string
     default: ""
@@ -34,6 +34,11 @@ config_schema:
     type: string
     default: ""
     description: "Model speed, default or fast. Empty uses Aside's own default."
+  permission:
+    type: string
+    default: "ask"
+    enum: [ask, guard, full-access]
+    description: "User-controlled via `hermes aside permission`; never a tool argument."
   browser_policy:
     type: string
     default: "prefer"

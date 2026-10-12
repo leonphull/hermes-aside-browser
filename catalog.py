@@ -1,4 +1,4 @@
-"""Read Aside's local model catalog. Never returns credentials."""
+"""Read models from Aside's settings.json only; never open models.json or credentials."""
 
 from __future__ import annotations
 
@@ -35,51 +35,12 @@ def _read_json(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def _kind(provider_id: str, spec: dict) -> str:
-    name = str(spec.get("name") or "")
-    blob = f"{provider_id} {name}".lower()
-    if "oauth" in blob or "subscription" in blob or "accountModelCatalog" in spec:
-        return "subscription"
-    if spec.get("baseUrl"):
-        return "connected"
-    return "connected"
-
-
-def _models(spec: dict) -> list[dict]:
-    raw = spec.get("models")
-    if isinstance(raw, list):
-        out = []
-        for item in raw:
-            if isinstance(item, str) and item.strip():
-                out.append({"id": item.strip(), "name": item.strip()})
-            elif isinstance(item, dict) and item.get("id"):
-                out.append({"id": str(item["id"]), "name": str(item.get("name") or item["id"])})
-        return out
-    catalog = spec.get("accountModelCatalog")
-    if isinstance(catalog, dict) and isinstance(catalog.get("modelIds"), list):
-        return [{"id": str(item), "name": str(item)} for item in catalog["modelIds"] if isinstance(item, str)]
-    return []
-
-
 def load_catalog(account: str | None = None) -> dict:
     folder = account_dir(account)
     if folder is None:
-        return {"account_dir": None, "default": None, "providers": [], "presets": {}, "custom": []}
+        return {"account_dir": None, "default": None, "presets": {}, "custom": []}
     settings = _read_json(folder / "settings.json")
-    models = _read_json(folder / "models.json")
     default = settings.get("defaultModel") if isinstance(settings.get("defaultModel"), dict) else {}
-    providers = []
-    for provider_id, spec in (models.get("providers") or {}).items():
-        if not isinstance(spec, dict):
-            continue
-        providers.append(
-            {
-                "id": str(provider_id),
-                "name": str(spec.get("name") or provider_id),
-                "kind": _kind(str(provider_id), spec),
-                "models": _models(spec),
-            }
-        )
     presets = {}
     categories = settings.get("modelCategories") if isinstance(settings.get("modelCategories"), dict) else {}
     for name in PRESETS:
@@ -102,7 +63,6 @@ def load_catalog(account: str | None = None) -> dict:
     return {
         "account_dir": str(folder),
         "default": default_ref,
-        "providers": providers,
         "presets": presets,
         "custom": custom,
     }
@@ -117,7 +77,7 @@ def resolve_choice(catalog: dict, text: str) -> str:
     choice = text.strip()
     if not choice or choice in {"default", "aside", "aside-default"}:
         return ""
-    if choice in catalog.get("presets") or {}:
+    if choice in (catalog.get("presets") or {}):
         preset = catalog["presets"][choice]
         return format_ref(preset["provider"], preset["model"])
     if "/" in choice:
@@ -126,10 +86,6 @@ def resolve_choice(catalog: dict, text: str) -> str:
             raise ValueError("model must look like provider/model")
         return f"{provider}/{model}"
     matches = []
-    for provider in catalog.get("providers") or []:
-        for model in provider["models"]:
-            if choice in {model["id"], model["name"]}:
-                matches.append(format_ref(provider["id"], model["id"]))
     for item in catalog.get("custom") or []:
         if choice in {item["id"], item["name"]}:
             matches.append(format_ref(item["provider"], item["id"]))

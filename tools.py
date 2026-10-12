@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from . import aside_cli
-from .policy import apply_policy
+from .policy import PolicyError, apply_policy, effective_policy
 
 _policy_loader = lambda: {}
 
@@ -33,11 +33,57 @@ def _optional(data: dict, key: str) -> str | None:
     return text or None
 
 
+def _policy_error(exc: Exception) -> str:
+    return _dump(
+        {
+            "ok": False,
+            "status": "POLICY_INVALID",
+            "message": (
+                "The Aside profile policy could not be read or is invalid, so nothing was run: "
+                f"{exc}. Fix it with `hermes aside permission` and the other `hermes aside` commands."
+            ),
+        }
+    )
+
+
+def _policy_call(args) -> tuple[dict | None, str | None]:
+    """Merge the call with the trusted profile policy. Fails closed on a bad policy."""
+    try:
+        return apply_policy(_args(args), _policy_loader()), None
+    except Exception as exc:  # loader errors and invalid values must never fall back to defaults
+        return None, _policy_error(exc)
+
+
+def _unverified(what: str) -> str:
+    return _dump(
+        {
+            "ok": False,
+            "status": "POLICY_UNVERIFIED",
+            "message": (
+                f"{what} is blocked: this plugin cannot verify the permission or host of an existing "
+                "Aside session, so it will not drive one. Start a new aside_exec without session_id. "
+                "aside_session still supports list, stop, archive, and delete."
+            ),
+        }
+    )
+
+
+def _has_value(data: dict, key: str) -> bool:
+    value = data.get(key)
+    return value is not None and str(value).strip() != ""
+
+
 def aside_status(args=None, **kwargs) -> str:
     from .catalog import format_ref, load_catalog
 
     payload = aside_cli.probe()
-    policy = _policy_loader() or {}
+    try:
+        policy = effective_policy(_policy_loader())
+    except Exception as exc:
+        policy = {key: "" for key in ("model", "host", "account", "effort", "speed", "permission")}
+        payload["policy_error"] = str(exc)
+        payload["ok"] = False
+        payload["status"] = "POLICY_INVALID"
     payload["profile"] = policy
     catalog = load_catalog(policy.get("account") or None)
     default = catalog.get("default") or {}
@@ -49,19 +95,24 @@ def aside_status(args=None, **kwargs) -> str:
     payload["resolved"] = {
         "model": policy.get("model") or default_model,
         "model_source": "profile pin" if policy.get("model") else "Aside default",
-        "host": policy.get("host") or "local",
-        "host_source": "profile pin" if policy.get("host") else "local",
+        "host": policy.get("host") or "Aside's default host",
+        "host_source": "profile pin" if policy.get("host") else "Aside default",
         "account": policy.get("account") or "Aside's current account",
+        "permission": policy.get("permission") or ("invalid" if payload.get("policy_error") else "ask"),
     }
     return _dump(payload)
 
 
 def aside_exec(args=None, **kwargs) -> str:
-    data = apply_policy(_args(args), _policy_loader())
+    # Hermes injects its own context kwargs (task_id, session_id, ...). They are never read here.
+    if _has_value(_args(args), "session_id"):
+        return _unverified("Continuing an existing Aside session")
+    data, error = _policy_call(args)
+    if error:
+        return error
     try:
         argv = aside_cli.exec_args(
             str(data.get("prompt") or ""),
-            session_id=_optional(data, "session_id"),
             account=_optional(data, "account"),
             host=_optional(data, "host"),
             profile=_optional(data, "profile"),
@@ -79,7 +130,9 @@ def aside_exec(args=None, **kwargs) -> str:
 
 
 def aside_repl(args=None, **kwargs) -> str:
-    data = apply_policy(_args(args), _policy_loader())
+    data, error = _policy_call(args)
+    if error:
+        return error
     try:
         argv = aside_cli.repl_args(
             str(data.get("code") or ""),
@@ -97,8 +150,12 @@ def aside_repl(args=None, **kwargs) -> str:
 
 
 def aside_session(args=None, **kwargs) -> str:
-    data = apply_policy(_args(args), _policy_loader())
-    action = str(data.get("action") or "").strip()
+    action = str(_args(args).get("action") or "").strip()
+    if action.lower() in aside_cli.CONTINUATION_ACTIONS:
+        return _unverified(f"Session action {action}")
+    data, error = _policy_call(args)
+    if error:
+        return error
     if action in DESTRUCTIVE and data.get("confirm") is not True:
         return _dump(
             {
@@ -111,7 +168,6 @@ def aside_session(args=None, **kwargs) -> str:
         argv = aside_cli.session_args(
             action,
             session_id=_optional(data, "session_id"),
-            prompt=_optional(data, "prompt"),
             account=_optional(data, "account"),
         )
     except ValueError as exc:
@@ -123,7 +179,9 @@ def aside_session(args=None, **kwargs) -> str:
 
 
 def aside_memory(args=None, **kwargs) -> str:
-    data = apply_policy(_args(args), _policy_loader())
+    data, error = _policy_call(args)
+    if error:
+        return error
     queries = data.get("queries") or []
     if isinstance(queries, str):
         queries = [queries]
@@ -179,28 +237,26 @@ SCHEMAS = {
             "description": (
                 "Run a task in the signed-in Aside browser through Aside's agent. "
                 "Use for logged-in sites, judgment, and multi-step browsing. "
-                "Pass session_id to continue. If mcp__aside__exec is available, use that instead."
+                "This plugin tool is the required route for exec: only it applies the user's permission setting "
+                "(effective default ask) and host, account, and model pins. Do not use mcp__aside__exec instead. "
+                "Always starts a new session. Continuing an existing session (session_id) is blocked with "
+                "POLICY_UNVERIFIED because its permission and host cannot be verified; start a new exec instead."
                 + _COMMON
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "prompt": {"type": "string", "description": "Task prompt or URL."},
-                    "session_id": {"type": "string", "description": "ses_ id to resume."},
-                    "account": {"type": "string", "description": "Aside account id, such as u0."},
-                    "host": {"type": "string", "description": "Session host: local, a host id, or a device name."},
-                    "profile": {"type": "string", "description": "Browser profile id on the selected host."},
+                    "profile": {
+                        "type": "string",
+                        "description": "Aside browser profile id on the selected host. Not a Hermes profile or account.",
+                    },
                     "model": {"type": "string", "description": "Model id or provider/model."},
                     "effort": {
                         "type": "string",
                         "enum": ["off", "minimal", "low", "medium", "high", "xhigh", "max", "ultrabrowse"],
                     },
                     "speed": {"type": "string", "enum": ["default", "fast"]},
-                    "permission": {
-                        "type": "string",
-                        "enum": ["ask", "guard", "full-access"],
-                        "description": "Omit unless the user asked for full-access.",
-                    },
                     "timeout_seconds": {"type": "integer", "minimum": 5, "maximum": 600},
                 },
                 "required": ["prompt"],
@@ -215,7 +271,8 @@ SCHEMAS = {
             "description": (
                 "Run one Playwright-style JavaScript script in Aside for a snapshot, click, or screenshot. "
                 "One-shot: bindings do not persist. Put the whole flow in this script. "
-                "If mcp__aside__repl is available, use that instead; its scope persists across calls. "
+                "Use this when the user's profile pins a host or account (see aside_status profile); it applies those pins. "
+                "With no host or account pin, mcp__aside__repl is allowed; its scope persists across calls. "
                 "Do not print image base64."
                 + _COMMON
             ),
@@ -224,8 +281,6 @@ SCHEMAS = {
                 "properties": {
                     "code": {"type": "string", "description": "JavaScript. Use console.log for results."},
                     "title": {"type": "string", "description": "Short label for the action, not executed."},
-                    "account": {"type": "string"},
-                    "host": {"type": "string"},
                     "profile": {"type": "string"},
                     "timeout_seconds": {"type": "integer", "minimum": 5, "maximum": 150},
                 },
@@ -239,8 +294,9 @@ SCHEMAS = {
         "function": {
             "name": "aside_session",
             "description": (
-                "List, resume, steer, queue, stop, archive, or delete an Aside browser session. "
-                "steer interrupts the current turn. queue runs after it. "
+                "List, stop, archive, or delete an Aside browser session. "
+                "Resume, steer, and queue are not supported: this plugin cannot verify an existing session's "
+                "permission or host (POLICY_UNVERIFIED); start a new aside_exec instead. "
                 "archive and delete require confirm=true. Do not paste unrelated session titles to the user."
             ),
             "parameters": {
@@ -248,11 +304,9 @@ SCHEMAS = {
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["list", "resume", "steer", "queue", "stop", "archive", "delete"],
+                        "enum": ["list", "stop", "archive", "delete"],
                     },
                     "session_id": {"type": "string"},
-                    "prompt": {"type": "string"},
-                    "account": {"type": "string"},
                     "confirm": {"type": "boolean"},
                     "timeout_seconds": {"type": "integer", "minimum": 5, "maximum": 180},
                 },
@@ -268,7 +322,8 @@ SCHEMAS = {
             "description": (
                 "Search Aside memory for the user's people, projects, sites, and preferences. "
                 "Read-only. Use before asking the user about prior context. "
-                "If mcp__aside__memory_search is available, use that instead. Never edit memory files."
+                "Use this when the user's profile pins an account (see aside_status profile); it applies that pin. "
+                "With no account pin, mcp__aside__memory_search is allowed. Never edit memory files."
             ),
             "parameters": {
                 "type": "object",
@@ -280,7 +335,6 @@ SCHEMAS = {
                         "maxItems": 3,
                     },
                     "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
-                    "account": {"type": "string"},
                 },
                 "required": ["queries"],
                 "additionalProperties": False,
